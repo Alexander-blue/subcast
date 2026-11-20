@@ -1063,7 +1063,7 @@ mod scan_tests {
         std::fs::create_dir_all(&other).unwrap();
         let mut ggml = b"lmgg".to_vec(); ggml.resize(31 * 1_048_576, 0);
         std::fs::write(other.join("ggml-medium.bin"), &ggml).unwrap();
-        std::fs::write(other.join("ggml-tiny.bin"), b"lmgg too small").unwrap();
+        std::fs::write(other.join("ggml-subcast-test-tiny.bin"), b"lmgg too small").unwrap();
         let mut fake = b"XXXX".to_vec(); fake.resize(31 * 1_048_576, 0);
         std::fs::write(other.join("ggml-small-q5_1.bin"), &fake).unwrap();
         let data = home.join("data");
@@ -1074,12 +1074,16 @@ mod scan_tests {
         for src in found {
             let name = src.file_name().unwrap().to_string_lossy().to_string();
             let Some(engine) = engine_of(&name) else { continue };
-            if looks_like_model(&src, engine) { std::os::unix::fs::symlink(&src, models_dir(&data).join(&name)).unwrap(); }
+            if !looks_like_model(&src, engine) { continue; }
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&src, models_dir(&data).join(&name)).unwrap();
+            #[cfg(windows)]
+            std::fs::hard_link(&src, models_dir(&data).join(&name)).unwrap();
         }
         let list = list_models(&data);
         let medium = list.iter().find(|m| m.id == "file:ggml-medium.bin").expect("found model listed");
         assert!(medium.installed && medium.from.is_some(), "{:?}", medium.from);
-        assert!(!list.iter().any(|m| m.id == "file:ggml-tiny.bin"), "too small is not a model");
+        assert!(!list.iter().any(|m| m.id == "file:ggml-subcast-test-tiny.bin"), "too small is not a model");
         assert!(!list.iter().find(|m| m.id == "small").unwrap().installed, "wrong magic is not adopted");
         let r = resolve(&data, "file:ggml-medium.bin").unwrap();
         assert_eq!(r.engine, "whisper");
